@@ -65,7 +65,13 @@ function buildPgnHtml(moves: CustomPgnMove[], altLine?: boolean): string {
       for (let i = 0; i < move.variations.length; i++) {
         if (i > 0) html += `<br>`;
         const variation = move.variations[i];
+        const variationKey = variation?.[0]?.pgnPath?.join(",") ?? "";
+        const parentKey = move.pgnPath?.join(",") ?? "";
+        const variationLabel = formatVariationLabel(i);
+        html += `<div class="variation-line" data-variation-key="${variationKey}" data-parent-key="${parentKey}">`;
+        html += `<span class="variation-label">(Line ${variationLabel})</span>`;
         html += `<span class="altLineBracket">(</span>${buildPgnHtml(variation, true)}<span class="altLineBracket">)</span>`;
+        html += `</div>`;
       }
       if (!altLine) {
         html += `</div>`;
@@ -85,6 +91,18 @@ export function isEndOfLine(path: PgnPath): boolean {
     nextMovePath.join(","),
   )?.pgnPath;
   return nextMoveCheck ? false : true;
+}
+
+function formatVariationLabel(index: number): string {
+  let label = "";
+  let currentIndex = index;
+
+  while (currentIndex >= 0) {
+    label = String.fromCharCode((currentIndex % 26) + 65) + label;
+    currentIndex = Math.floor(currentIndex / 26) - 1;
+  }
+
+  return label;
 }
 
 function navigateFullMoveSequenceFromPath(path: PgnPath): PgnPath {
@@ -326,6 +344,35 @@ export function navigatePrevMove(path: PgnPath): PgnPath {
   return prevMovePath;
 }
 
+export function navigateSiblingVariation(
+  path: PgnPath,
+  direction: 1 | -1,
+): PgnPath {
+  const variationIndex = path.lastIndexOf("v");
+  if (variationIndex === -1) return path;
+
+  const parentMovePath = path.slice(0, variationIndex);
+  const parentMove = state.pgnTrack.pgnPathMap.get(parentMovePath.join(","));
+  if (!parentMove?.variations?.length) return path;
+
+  const currentVarIndex = path[variationIndex + 1];
+  if (typeof currentVarIndex !== "number") return path;
+
+  const targetIndex = currentVarIndex + direction;
+  if (targetIndex < 0 || targetIndex >= parentMove.variations.length) return path;
+
+  const targetVariation = parentMove.variations[targetIndex];
+  const desiredMoveIndex =
+    (typeof path[variationIndex + 2] === "number" ? path[variationIndex + 2] : 0) ??
+    0;
+  const clampedMoveIndex = Math.min(
+    Math.max(desiredMoveIndex, 0),
+    Math.max(targetVariation.length - 1, 0),
+  );
+
+  return [...parentMovePath, "v", targetIndex, clampedMoveIndex];
+}
+
 // --- PGN Data Augmentation ---
 export function augmentPgnTree(moves: PgnMove[], path: PgnPath = []): void {
   const chess = new Chess(state.startFen);
@@ -385,12 +432,25 @@ export function highlightCurrentMove(pgnPath: PgnPath): void {
   document
     .querySelectorAll("#pgnComment .move.current")
     .forEach((el) => el.classList.remove("current"));
+  document
+    .querySelectorAll("#pgnComment .variation-line.active")
+    .forEach((el) => el.classList.remove("active"));
   const pgnMoveEl = document.querySelector(
     `[data-path-key="${pgnPath.join(",")}"]`,
   );
   if (pgnMoveEl) {
     pgnMoveEl.classList.add("current");
   }
+
+  const variationKeys = collectVariationKeys(pgnPath);
+  variationKeys.forEach((variationKey) => {
+    const variationEl = document.querySelector(
+      `[data-variation-key="${variationKey}"]`,
+    );
+    if (variationEl) variationEl.classList.add("active");
+  });
+
+  updateBreadcrumb(pgnPath);
 }
 
 // --- Initialization ---
@@ -399,10 +459,41 @@ export function initPgnViewer(): void {
   const pgnContainer = document.getElementById("pgnComment");
   if (!pgnContainer) return;
 
-  pgnContainer.innerHTML = "";
+  pgnContainer.innerHTML = '<div id="pgnBreadcrumb" class="pgn-breadcrumb"></div>';
   if (state.parsedPGN.gameComment) {
     pgnContainer.innerHTML += `<span class="comment"> ${state.parsedPGN.gameComment.comment} </span>`;
   }
   pgnContainer.innerHTML += buildPgnHtml(state.parsedPGN.moves);
   highlightCurrentMove(state.pgnTrack.pgnPath);
+}
+
+function collectVariationKeys(pgnPath: PgnPath): string[] {
+  const variationKeys: string[] = [];
+  for (let i = 0; i < pgnPath.length; i++) {
+    if (pgnPath[i] === "v" && typeof pgnPath[i + 1] === "number") {
+      const variationRoot: PgnPath = [...pgnPath.slice(0, i + 2), 0];
+      variationKeys.push(variationRoot.join(","));
+    }
+  }
+  return variationKeys;
+}
+
+function updateBreadcrumb(pgnPath: PgnPath): void {
+  const breadcrumbEl = document.getElementById("pgnBreadcrumb");
+  if (!breadcrumbEl) return;
+
+  const segments = ["Main line"];
+
+  for (let i = 0; i < pgnPath.length; i++) {
+    if (pgnPath[i] === "v" && typeof pgnPath[i + 1] === "number") {
+      const label = `Line ${formatVariationLabel(pgnPath[i + 1] as number)}`;
+      const parentMove = state.pgnTrack.pgnPathMap.get(
+        pgnPath.slice(0, i).join(","),
+      );
+      const parentMoveText = parentMove?.notation?.notation;
+      segments.push(parentMoveText ? `${label} after ${parentMoveText}` : label);
+    }
+  }
+
+  breadcrumbEl.textContent = segments.join(" › ");
 }
