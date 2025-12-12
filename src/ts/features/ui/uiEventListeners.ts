@@ -1,6 +1,7 @@
 import { config } from "../../core/config";
 import { state } from "../../core/state";
 import { stateProxy } from "../../core/stateProxy";
+import type { PgnPath } from "../pgn/Pgn";
 import {
   navForward,
   navBackward,
@@ -13,6 +14,7 @@ import {
   toggleStockfishAnalysis,
   handleStockfishCrash,
 } from "../analysis/handleStockfish";
+import { navigateSiblingVariation } from "../pgn/pgnViewer";
 
 // --- Event listeners ---
 
@@ -122,6 +124,11 @@ export function setupEventListeners(): void {
     }
   });
 
+  const updatePgnPath = (nextPath: PgnPath): void => {
+    if (nextPath.join(",") === state.pgnTrack.pgnPath.join(",")) return;
+    stateProxy.pgnTrack.pgnPath = nextPath;
+  };
+
   document.addEventListener("keydown", (event: KeyboardEvent) => {
     if (
       (promoteOverlay && !promoteOverlay.classList.contains("hidden")) ||
@@ -135,9 +142,19 @@ export function setupEventListeners(): void {
       case "ArrowRight":
         navForward();
         break;
-      case "ArrowDown":
-        resetBoard();
+      case "ArrowUp":
+      case "ArrowDown": {
+        const direction = event.key === "ArrowUp" ? -1 : 1;
+        const nextPath = navigateSiblingVariation(
+          state.pgnTrack.pgnPath,
+          direction,
+        );
+        if (nextPath.join(",") !== state.pgnTrack.pgnPath.join(",")) {
+          event.preventDefault();
+        }
+        updatePgnPath(nextPath);
         break;
+      }
     }
   });
 

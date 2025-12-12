@@ -61,6 +61,23 @@
     font-size: 0.8em;
     padding: 0.3em;
 
+    .variation-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35em;
+      padding: 0.2em 0.3em;
+      border-radius: $border-radius-main;
+
+      &.active {
+        background: rgba($color-bg-primary, 0.1);
+
+        .variation-label {
+          color: $color-bg-primary;
+          font-weight: 700;
+        }
+      }
+    }
+
     span {
       display: inline-flex;
       background-color: inherit;
@@ -90,6 +107,12 @@
         font-size: 0.9em;
         display: inline-flex;
       }
+
+      &.variation-label {
+        color: $color-text-primary;
+        font-style: italic;
+        background: none;
+      }
     }
   }
 
@@ -117,5 +140,17 @@
     visibility: hidden;
     opacity: 0;
     transition: opacity 0.3s ease;
+  }
+
+  .pgn-breadcrumb {
+    grid-column: 1 / -1;
+    padding: 0.4em 0.5em;
+    font-size: 0.9em;
+    background: $color-bg-secondary;
+    color: $color-text-primary;
+    border-bottom: $border-main-thin;
+    display: flex;
+    gap: 0.3em;
+    flex-wrap: wrap;
   }
 }
